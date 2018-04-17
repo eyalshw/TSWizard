@@ -265,6 +265,17 @@ namespace TSWizardDemo
 
 		}
 
+        internal void SetMaximumProgressBar(int count)
+        {
+            this.progressBar1.Maximum = count;
+        }
+
+        internal void IncrementProgressBar(int data)
+        {
+            this.progressBar1.Value++;
+            this.SetResult(this.progressBar1.Value);
+        }
+
         internal void SetProgressBar(int percent)
         {
             this.progressBar1.Value = percent;

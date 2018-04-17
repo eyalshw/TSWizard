@@ -2,70 +2,79 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
 
 namespace TSWizardDemo
 {
-	public class Step1 : TSWizards.BaseExteriorStep
-	{
-		private System.Windows.Forms.Label label1;
-		private System.Windows.Forms.CheckBox noShowWelcome;
-		private System.Windows.Forms.Label label2;
-		private System.ComponentModel.IContainer components = null;
-        private BackgroundWorker backgroundWorker1;
+    public class Step1 : TSWizards.BaseExteriorStep
+    {
+        private System.Windows.Forms.Label label1;
+        private System.Windows.Forms.CheckBox noShowWelcome;
+        private System.Windows.Forms.Label label2;
+        private System.ComponentModel.IContainer components = null;
         private List<String> m_hosts = new List<string>();
 
-		public Step1()
-		{
-			// This call is required by the Windows Form Designer.
-			InitializeComponent();
+        private IProgress<string> _progress;
+        
 
-			// TODO: Add any initialization after the InitializeComponent call
-			SideBarImage = new Bitmap(typeof(Step1), "customSideBarImage.jpg");
+        public Step1()
+        {
+            // This call is required by the Windows Form Designer.
+            InitializeComponent();
+
+            // TODO: Add any initialization after the InitializeComponent call
+            SideBarImage = new Bitmap(typeof(Step1), "customSideBarImage.jpg");
 
             populateHosts();
-		}
+
+            
+
+            
+        }
 
         private void populateHosts()
         {
-            for (int i = 0; i < 30000; i++)
+            Random r = new Random();
+            int ip = r.Next(10, 200);
+            for (int i = 0; i < 3000; i++)
             {
-                m_hosts.Add(@"\\127.0.0.1\c$");
-                m_hosts.Add(@"\\127.0.0.2\c$\Test");
-                m_hosts.Add(@"\\127.0.0.3\c$\NonExistingDir");
+                m_hosts.Add(@"\\127.0.0.1\\c$");
+                m_hosts.Add(@"\\127.0.0.1\\c$\\NonExistingDir");
+                m_hosts.Add(String.Format("\\\\{0}.{1}.{2}.{3}\\c$\\NonExistingDir", ip, ip, ip, ip));
             }
         }
 
         /// <summary>
         /// Clean up any resources being used.
         /// </summary>
-        protected override void Dispose( bool disposing )
-		{
-			if( disposing )
-			{
-				if (components != null) 
-				{
-					components.Dispose();
-				}
-			}
-			base.Dispose( disposing );
-		}
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                if (components != null)
+                {
+                    components.Dispose();
+                }
+            }
+            base.Dispose(disposing);
+        }
 
-		#region Designer generated code
-		/// <summary>
-		/// Required method for Designer support - do not modify
-		/// the contents of this method with the code editor.
-		/// </summary>
-		private void InitializeComponent()
-		{
+        #region Designer generated code
+        /// <summary>
+        /// Required method for Designer support - do not modify
+        /// the contents of this method with the code editor.
+        /// </summary>
+        private void InitializeComponent()
+        {
             this.label1 = new System.Windows.Forms.Label();
             this.noShowWelcome = new System.Windows.Forms.CheckBox();
             this.label2 = new System.Windows.Forms.Label();
-            this.backgroundWorker1 = new System.ComponentModel.BackgroundWorker();
             this.SuspendLayout();
             // 
             // Description
@@ -100,13 +109,6 @@ namespace TSWizardDemo
             this.label2.Text = "In this wizard I will take your order then fetch it in 30 seconds or less; or els" +
     "e its free!";
             // 
-            // backgroundWorker1
-            // 
-            this.backgroundWorker1.WorkerReportsProgress = true;
-            this.backgroundWorker1.WorkerSupportsCancellation = true;
-            this.backgroundWorker1.DoWork += new System.ComponentModel.DoWorkEventHandler(this.onDoWork);
-            this.backgroundWorker1.ProgressChanged += new System.ComponentModel.ProgressChangedEventHandler(this.onProgressChanged);
-            // 
             // Step1
             // 
             this.Controls.Add(this.label2);
@@ -123,27 +125,34 @@ namespace TSWizardDemo
             this.Controls.SetChildIndex(this.Description, 0);
             this.ResumeLayout(false);
 
-		}
-		#endregion
+        }
+        #endregion
 
-		public bool NoShowWelcomeAgain
-		{
-			get
-			{
-				return noShowWelcome.Checked;
-			}
-			set
-			{
-				noShowWelcome.Checked = value;
-			}
-		}
+        public bool NoShowWelcomeAgain
+        {
+            get
+            {
+                return noShowWelcome.Checked;
+            }
+            set
+            {
+                noShowWelcome.Checked = value;
+            }
+        }
 
         private void onShowStep(object sender, TSWizards.ShowStepEventArgs e)
         {
-            if (backgroundWorker1.IsBusy != true)
-            {
-                backgroundWorker1.RunWorkerAsync();
-            }
+
+            Step2 step2 = Wizard.GetStep("Step2") as Step2;
+            step2.SetProgressBar(0);
+            step2.SetMaximumProgressBar(m_hosts.Count);
+            _progress = new Progress<string>(data => step2.IncrementProgressBar(0));
+
+            onDoWorkAsync();
+            //if (backgroundWorker1.IsBusy != true)
+            //{
+            //    backgroundWorker1.RunWorkerAsync();
+            //}
 
             //int nofExistingDirectories = 0;
             //Step2 step2 = Wizard.GetStep("Step2") as Step2;
@@ -176,38 +185,82 @@ namespace TSWizardDemo
             //    });
         }
 
-        public bool CheckNetworkDrive(string path)
+        public async Task<bool> CheckNetworkDrive(string path, TimeSpan timespan)
         {
-            var task = new Task<bool>(() => { var di = new DirectoryInfo(path); return di.Exists; });
-            task.Start();
+            var task = Task.Run(() => {
+                var di = new DirectoryInfo(path);
+                bool res = di.Exists;
+                Console.WriteLine(String.Format("CheckNetworkDrive: {0}: {1}", path, di.Exists));
+                return res;
+            });
+            Task t = await Task.WhenAny(task, Task.Delay(timespan));
 
-            return task.Wait(10000) && task.Result;
+            bool isExits = (t == task && task.Result);
+
+            _progress.Report(String.Format("_progress: {0}: {1}", path, isExits));
+
+            return isExits;
         }
 
-        private void onDoWork(object sender, DoWorkEventArgs e)
+
+
+        // Replace with call to private me
+        //private void onDoWork(object sender, DoWorkEventArgs e)
+        //{
+        //    Task _ = onDoWorkAsync(e);
+        //}
+        private async Task onDoWorkAsync()
         {
             int nofExistingDirectories = 0;
             Step2 step2 = Wizard.GetStep("Step2") as Step2;
 
-            // TODO: Add parallel for loop calculation
-            for (int i = 0; i < m_hosts.Count; i++)
+            var tasks = m_hosts.Select(h => CheckNetworkDrive(h, TimeSpan.FromSeconds(300)));
+            bool[] results = await Task.WhenAll(tasks);
+
+            /*
+            Task entireTask = Task.WhenAll(tasks);
+            int i = 0;
+            int foundRemoteDirs = 0;
+            bool res;
+            while (res = await Task.WhenAny(entireTask, Task.Delay(6000)) != entireTask)
             {
-
-
-                if (CheckNetworkDrive(m_hosts[i]))
-                {
-                    nofExistingDirectories++;
-                    step2.SetResult(nofExistingDirectories);
-                }
-
+                var progressReporter = new ProgressReporter();
                 float percent = (float)i / (float)m_hosts.Count * 100.0f;
                 step2.SetProgressBar((int)percent);
+                i++;
+
+                if (res)
+                {
+                    step2.SetResult(foundRemoteDirs);
+                    foundRemoteDirs++;
+                }
             }
+            */
+
+            //step2.SetProgressBar(100);
+            //bool[] results = await Task.WhenAll(tasks);
+            //Trace.WriteLine(results.Count(m => m));
+            ////TODO: Add parallel for loop calculation
+            //for (int i = 0; i < m_hosts.Count; i++)
+            //{
+            //    Trace.Write(string.Format("{0}: Checking {1} ....", i, m_hosts[i]));
+            //    bool res = await CheckNetworkDrive(m_hosts[i], TimeSpan.FromSeconds(5));
+            //    Trace.WriteLine(res.ToString());
+            //    //if (res)
+            //    //{
+            //    //    nofExistingDirectories++;
+            //    //    step2.SetResult(nofExistingDirectories);
+            //    //}
+
+            //    //float percent = (float)i / (float)m_hosts.Count * 100.0f;
+            //    //step2.SetProgressBar((int)percent);
+            //}
 
             //Parallel.For(0, m_hosts.Count,
-            //    index =>
+            //    async index =>
             //    {
-            //        if (CheckNetworkDrive(m_hosts[index]))
+            //        bool res = await CheckNetworkDrive(m_hosts[index], TimeSpan.FromSeconds(1));
+            //        if (res)
             //        {
             //            nofExistingDirectories++;
             //            step2.SetResult(nofExistingDirectories);
@@ -218,21 +271,20 @@ namespace TSWizardDemo
             //    });
         }
 
-        private void onProgressChanged(object sender, ProgressChangedEventArgs e)
-        {
-            if (Wizard == null)
-            {
-                return;
-            }
+        //private void onProgressChanged(object sender, ProgressChangedEventArgs e)
+        //{
+        //    if (Wizard == null)
+        //    {
+        //        return;
+        //    }
 
-            Step2 step2 = (Step2)e.UserState;
+        //    Step2 step2 = (Step2)e.UserState;
 
-            if (step2 != null)
-            {
-                step2.SetProgressBar(e.ProgressPercentage);
-            }
-        }
-            
+        //    if (step2 != null)
+        //    {
+        //        step2.SetProgressBar(e.ProgressPercentage);
+        //    }
+        //}
+
     }
 }
-
